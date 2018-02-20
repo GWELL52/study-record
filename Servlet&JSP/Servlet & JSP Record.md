@@ -225,3 +225,145 @@ void sendRedirect(java.lang.String location)
 1. 可以使用在@WebServlet中没有的元素， 如load-on-startup元素。 这个元素使得Servlet在应用程序启动时加载， 而不是在第一次调用时加载。 如果Servlet的init方法需要花一些时间才能完成的话， 使用load-on-startup意味着第一次调用Servlet所花的时间并不比后续的调用长， 这项功能就特别有用 。
 2. 如果需要修改配置值， 如Servlet路径， 则不需要重新编译Servlet类。此外， 可以将初始参数传给一个Servlet， 并且不需要重新编译Servlet类， 就可以对它们进行编辑。 
 3. 部署描述符还允许覆盖在Servlet标注中定义的值。Servlet上的WebServlet标注如果同时也在部署描述符中进行声明， 那么它将不起作用。 然而， 在有部署描述符的应用程序中， 却不在部署描述符中标注Servlet时， 则仍然有效。 这意味着， 可以标注Servlet， 并在同一个应用程序的部署描述符中声明这些Servlet。 
+
+## 会话管理
+
+由于HTTP的无状态性， 使得会话管理或会话跟踪成为Web应用开发一个无可避免的主题。 默认下， 一个Web服务器无法区分一个HTTP请求是否为第一次访问 。
+
+4种不同的状态保持技术： **URL重写**、**隐藏域**、 **cookies**和**HTTPSession对象**。  
+
+### URL重写
+
+URL重写是一种会话跟踪技术， 它将一个或多个token添加到URL的查询字符串中， 每个token通常为key=value形式， 如下:
+`url?key-1=value-1&key-2=value-2 ... &key-n=value-n`
+
+>  注意， URL和tokens间用问号（？ ） 分割， token间用与号（&） 。 
+
+URL重写适合于tokens无须在太多URL间传递的情况下， 然而它有如下限制： 
+
+- URL在某些浏览器上最大长度为2000字符；
+- 若要传递值到下一个资源， 需要将值插入到链接中， 换句话说， 静态页面很难传值；
+- URL重写需要在服务端上完成， 所有的链接都必须带值， 因此当一个页面存在很多链接时， 处理过程会是一个不小的挑战；
+- 某些字符， 例如空格、 与和问号等必须用base64编码；
+- 所有的信息都是可见的， 某些情况下不合适。 
+
+### 隐藏域
+
+使用隐藏域来保持状态类似于URL重写技术， 但不是将值附加到URL上， 而是放到HTML表单的隐藏域中。 当表单提交时， 隐藏域的值也同时提交到服务器端。 隐藏域技术仅当网页有表单时有效。 
+
+该技术相对于URL重写的优势在于： 没有字符数限制， 同时无须额外的编码。 但该技术同URL重写一样， 不适合跨越多个界面 。
+
+### Cookies
+
+Cookies是一个很少的信息片段， 可自动地在浏览器和Web服务器间交互， 因此cookies可存储在**多个页面**间传递的信息。 Cookie作为**HTTP header的一部分**， 其传输由HTTP协议控制。 此外， 你可以控制cookies的有效时间。 浏览器通常支持每个网站高达20个cookies。 
+
+> - Cookies的问题在于用户可以通过改变其浏览器设置来拒绝接受cookies。 
+
+可以通过传递name和value两个参数给Cookie 类的构造函数来创建一个cookies：
+` Cookie cookie = new Cookie(name, value); `
+
+创建完一个Cookie对象后， 你可以设置domain、path和maxAge属性。 其中， maxAge 属性决定cookie何时过期。 
+
+要将cookie发送到浏览器， 需要调用HttpServletResponse的add方法：
+` httpServletResponse.addCookie(cookie)  `
+
+> Cookies也可以通过客户端的javascript脚本创建和删除 
+
+服务端若要读取浏览器提交的cookie， 可以通过HttpServletRequest接口的getCookies方法， 该方法返回一个Cookie数组， 若没有cookies则返回null。 你需要遍历整个数组来查询某个特定名称的cookie。 如下为查询名为maxRecords的cookie的示例： 
+
+``` java
+Cookie[] cookies = request.getCookies();
+Cookie maxRecordsCookie = null;
+if (cookies != null) {
+  for (Cookie cookie : cookies) {
+    if (cookie.getName().equals("maxRecords")) {
+      maxRecordsCookie = cookie;
+      break;
+    }
+  }
+}
+```
+
+目前， 还没有类似于getCookieByName这样的方法来帮助简化工作。 此外， 也没有一个直接的方法来删除一个cookie， 你只能创建一个**同名**的cookie， 并将**maxAge**属性设置为**0**， 并添加到HttpServletResponse接口中。 如下为删除一个名为userName的cookie代码： 
+
+``` java
+Cookie cookie = new Cookie("userName", "");
+cookie.setMaxAge(0);
+response.addCookie(cookie);
+```
+
+### HttpSession对象 
+
+在所有的会话跟踪技术中， HttpSession 对象是最强大和最通用的。 一个用户可以**有且最多有一个**HttpSession， 并且不会被其他用户访问到。 
+
+HttpSession对象在用户第一次访问网站的时候自动被创建， 可以通过调用HttpServletRequest的getSession方法**获取**该对象。 getSession有两个重载方法： 
+
+``` java
+// 该方法会返回当前的HttpSession， 若当前没有， 则创建一个返回
+HttpSession getSession()
+  
+// getSession(false)返回当前HttpSession， 如当前存在， 则返回null
+// getSession(true)返回当前HttpSession， 若当前没有， 则创建一个getSession(true)同getSession()一致
+HttpSession getSession(boolean create)
+```
+
+可以通过HttpSession的setAttribute方法**将值放入HttpSession**， 该方法签字如下： 
+
+``` java
+void setAttribute(java.lang.String name, java.lang.Object value)
+```
+
+调用setAttribute方法时， 若传入的name参数此前已经使用过， 则会用**新值覆盖旧值**。 
+
+> **注意**，放入到HttpSession 的值， 是存储在**内存**中的， 因此， 不要往HttpSession放入太多对象或大对象。 
+>
+> > 尽管现代的Servlet容器在内存不够用的时候会将保存在HttpSessions的对象转储到二级存储上， 但这样有性能问题， 因此小心存储。
+>
+> 此外， 放到HttpSession的值不限于String类型， 可以是任意实现java.io.Serializable的java对象， 因为Servlet容器认为必要时会将这些对象**放入文件或数据库中**， 尤其在**内存不够用**的时候。
+>
+> 当然你也可以**将不支持序列化的对象放入**HttpSession， 只是这样， 当Servlet容器视图序列化的时候**会失败并报错**。 
+
+通过调用HttpSession的getAttribute方法可以**取回**之前放入的对象， 该方法的签名如下： 
+
+``` java
+java.lang.Object getAttribute(java.lang.String name)
+```
+
+HttpSession 还有一个非常有用的方法， 名为getAttributeNames， 该方法会返回一个Enumeration 对象来迭代访问保存在HttpSession中的**所有值**： 
+
+``` java
+java.util.Enumeration<java.lang.String> getAttributeNames()
+```
+
+> **注意**， 所有保存在HttpSession的数据不**会被发送到客户端** 。
+>
+> > 不同于其他会话管理技术， Servlet容器为**每个HttpSession 生成唯一的标识**， 并将该标识发送给浏览器， 或创建一个名为**JSESSIONID**的cookie， 或者在URL后附加一个名为jsessionid 的参数。 在后续的请求中， **浏览器会将标识提交给服务端**， 这样服务器就可以**识别该请求**是由哪个用户发起的。 
+> >
+> > Servlet容器会自动选择一种方式传递会话标识， 无须开发人员介入。 
+
+可以通过调用 HttpSession的getId方法来读取标识： 
+
+``` java
+java.lang.String getId()
+```
+
+此外， HttpSession.还定义了一个名为invalidate 的方法。 该方法**强制会话过期**， 并**清空其保存的对象**。 
+
+> 默认情况下， HttpSession 会在用户不活动一段时间后**自动过期**， 该时间可以通过部署描述符的 **session-timeout**元素配置， 若设置为30， 则会话对象会在用户最后一次访问30分钟后过期， 如果部署描述符没有配置， 则该值取决于Servlet容器的设定。
+
+部分情况下， 你应该主动销毁无用的HttpSession， 以便释放相应的内存 。
+
+可以通过调用HttpSession 的**getMaxInactiveInterval**方法来**查看会话多久会过期**。 该方法返回一个数字类型， 单位为秒。
+
+可以调用setMaxInactiveInterval 方法来单独对某个HttpSession 设定其超时时间： 
+
+``` java
+void setMaxInactiveInterval(int seconds)
+```
+
+若**设置为0**， 则该HttpSession **永不过期**。
+
+通常这不是一个好的设计， 因为该 HttpSession 所占用的堆内存将永不释放， 直到应用重加载或Servlet容器关闭。 
+
+## JavaServer Pages(JSP) 
+
